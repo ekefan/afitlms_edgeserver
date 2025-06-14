@@ -45,7 +45,7 @@ async def websocket_enrollment_status(websocket: WebSocket, enrollment_session_i
     except Exception as e:
         print(f"WebSocket error for session {enrollment_session_id}: {e}")
     finally:
-        close_enrollment_ws(enrollment_session_id)
+        await close_enrollment_ws(enrollment_session_id)
 
 async def send_ws_message(session_id: str, message_type: str, data: dict):
     if session_id in active_enrollment_websockets:
@@ -55,7 +55,7 @@ async def send_ws_message(session_id: str, message_type: str, data: dict):
             print(f"WS message sent to {session_id}: {message_type}")
         except Exception as e:
             print(f"Failed to send WS message to {session_id}: {e}")
-            del active_enrollment_websockets[session_id]
+            close_enrollment_ws(session_id=session_id)
 
 async def _run_serial_enrollment_and_update_ws_session(username: str, unique_id: str, session_id: str):
     """
@@ -64,14 +64,14 @@ async def _run_serial_enrollment_and_update_ws_session(username: str, unique_id:
     """
 
     uid = None
-    await send_ws_message(session_id, "status", {"stage": "INITIATED", "details": "Enrollment process started"})
-    await send_ws_message(session_id, "status", {"stage": "CONNECTING_ESP32", "details": "Connecting to ESP32..."})
+    await send_ws_message(session_id, "STATUS", {"stage": "INITIATED", "details": "Enrollment process started"})
+    await send_ws_message(session_id, "STATUS", {"stage": "CONNECTING_ESP32", "details": "Connecting to ESP32..."})
     try:
-        await send_ws_message(session_id, "status", {"stage": "WAITING_FOR_CARD", "details": "Please present RFID card on terminal."})
+        await send_ws_message(session_id, "STATUS", {"stage": "WAITING_FOR_CARD", "details": "Please present RFID card on terminal."})
         
         result = await asyncio.to_thread(
             subprocess.run,
-            ["python3", "serial_enroll.py", username, unique_id],
+            ["python3", "serial_enroll_sim.py", username, unique_id],
             capture_output=True,
             text=True,
             check=True # Raise CalledProcessError if serial_enroll.py fails
@@ -97,6 +97,7 @@ async def _run_serial_enrollment_and_update_ws_session(username: str, unique_id:
                 "success": True
             })
             print(f"Enrollment for {username} completed. UID: {uid}")
+            close_enrollment_ws(session_id=session_id)
         else:
             await send_ws_message(session_id, "FAILED", {
                 "message": "Enrollment failed: Could not retrieve UID from ESP32.",
@@ -119,8 +120,6 @@ async def _run_serial_enrollment_and_update_ws_session(username: str, unique_id:
             "message": error_message,
             "success": False
         })
-    finally:
-        await close_enrollment_ws(session_id=session_id)
 
 
 
