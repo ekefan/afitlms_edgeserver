@@ -24,7 +24,7 @@ class LectureSessionBase(BaseModel):
     lecturer_id: int
     session_date: datetime
 
-class StudentAtendanceRecordBase(BaseModel):
+class StudentAttendanceRecordBase(BaseModel):
     session_id: int
     student_id: int
     attendance_time: datetime

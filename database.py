@@ -1,6 +1,7 @@
 # database.py
 import sqlite3
 from contextlib import contextmanager
+import contextlib as ctxlib
 
 DATABASE_URL = "sqlite:///./central_server.db" # Or just "./central_server.db" for relative path
 
@@ -74,5 +75,12 @@ def get_db():
     finally:
         conn.close()
 
-# Call init_db() when your application starts up (e.g., in main)
-# init_db()
+
+
+####################################################
+########## Used to aquire a database conn ##########
+# with ctxlib.closing(get_db_connection()) as db_gen:
+#     db = next(db_gen)
+#     cursor = db.cursor()
+#     # handle database operations here
+#     db.commit()

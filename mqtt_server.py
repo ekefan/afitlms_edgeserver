@@ -13,7 +13,7 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe("esp32/record/attendance")
 
 def on_message(client, userdata, msg):
-    topic = msg.topic
+    topic = msg.topic 
     payload = json.loads(msg.payload.decode())
 
     if topic == "esp32/request/course_codes":

@@ -4,6 +4,7 @@ from data_store import enrollments
 from models import EnrollRequest
 from database import init_db
 from sync import Sync
+from mqtt_handler import start_mqtt_client, stop_mqtt_client
 import subprocess
 import time
 import asyncio
@@ -14,6 +15,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 
+mqtt_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,14 +23,37 @@ async def lifespan(app: FastAPI):
     Lifespan event to initialize the database connection.
     This will run once when the application starts.
     """
+    global mqtt_task
     init_db()
+    print('Application startup: Database schema initialized')
+
+    print('Application startup: Starting MQTT client')
+    mqtt_task = asyncio.create_task(start_mqtt_client())
+    print('Application startup: MQTT client task created')
     yield
+
+    if mqtt_task:
+        mqtt_task.cancel()
+        try:
+            await mqtt_task
+        except asyncio.CancelledError:
+            pass
+    await stop_mqtt_client()
+    print('Application shutdown:MQTT client stopped')
+    print('Application shutdown: All services stopped')
+
+
 active_enrollment_websockets: dict[str, WebSocket] = {}
 
 app = FastAPI(title="AFIT LMS Central Server",
-              lifespan=lifespan)
+              lifespan=lifespan,
+              description='Handles sync via HTTP and real-time data via MQTT'
+              )
 sync_router = Sync(app)
 
+@app.get('/')
+async def read_root():
+    return {"message": "Central Edge Server is running! HTTP and MQTT services active"}
 
 @app.post("/cs/enroll")
 async def enroll_user(data: EnrollRequest, background_tasks: BackgroundTasks):
