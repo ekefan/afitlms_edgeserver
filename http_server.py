@@ -1,25 +1,34 @@
 # http_server.py
-from fastapi import FastAPI, BackgroundTasks, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
-from data_store import enrollments, courses
+from contextlib import asynccontextmanager
+from data_store import enrollments
+from models import EnrollRequest
+from database import init_db
+from sync import Sync
 import subprocess
-import json
 import time
 import asyncio
+from fastapi import (
+    FastAPI, 
+    BackgroundTasks, 
+    WebSocket, 
+    WebSocketDisconnect,
+)
 
 
-app = FastAPI()
-
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan event to initialize the database connection.
+    This will run once when the application starts.
+    """
+    init_db()
+    yield
 active_enrollment_websockets: dict[str, WebSocket] = {}
 
-class EnrollRequest(BaseModel):
-    username: str
-    unique_id: str
+app = FastAPI(title="AFIT LMS Central Server",
+              lifespan=lifespan)
+sync_router = Sync(app)
 
-class SyncRequest(BaseModel):
-    course_code: str
-    lecturer: str
-    students: list[str]
 
 @app.post("/cs/enroll")
 async def enroll_user(data: EnrollRequest, background_tasks: BackgroundTasks):
@@ -30,6 +39,7 @@ async def enroll_user(data: EnrollRequest, background_tasks: BackgroundTasks):
         "enrollment_session_id": enrollment_session_id,
         "websocket_url": f'ws://127.0.0.1:8000/ws/enrollment_status/{enrollment_session_id}'
         }
+
 
 @app.websocket("/ws/enrollment_status/{enrollment_session_id}")
 async def websocket_enrollment_status(websocket: WebSocket, enrollment_session_id: str):
@@ -121,8 +131,6 @@ async def _run_serial_enrollment_and_update_ws_session(username: str, unique_id:
             "success": False
         })
 
-
-
 async def close_enrollment_ws(session_id: str):
     """
     Closes the WebSocket connection for a given session ID and removes it
@@ -141,13 +149,3 @@ async def close_enrollment_ws(session_id: str):
             print(f"Session {session_id} removed from active_enrollment_websockets.")
     else:
         print(f"WebSocket session {session_id} not found in active connections. Or already deleted.")
-
-
-
-@app.post("/cs/sync_course")
-def sync_course(data: SyncRequest):
-    courses[data.course_code] = {
-        "lecturer": {"name": data.lecturer, "attended": False},
-        "students": [{"name": s, "attended": False} for s in data.students]
-    }
-    return {"message": "Course sync updated."}
